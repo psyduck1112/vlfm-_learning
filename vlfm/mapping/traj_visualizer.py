@@ -72,6 +72,7 @@ class TrajectoryVisualizer:
 
         if np.array_equal(px_a, px_b):
             return img
+        #两点重合不画
 
         cv2.line(
             img,
@@ -80,12 +81,15 @@ class TrajectoryVisualizer:
             255,
             int(self.path_thickness * self.scale_factor),
         )
+        # 在掩膜上画白线
+        #注意坐标翻转，图像索引是行（y），列（x）
 
         return img
 
     def _draw_agent(self, img: np.ndarray, camera_position: np.ndarray, camera_yaw: float) -> np.ndarray:
         """Draws the agent on the image and returns it"""
         px_position = self._metric_to_pixel(camera_position)
+        # 转换机器人位置到像素坐标
         cv2.circle(
             img,
             tuple(px_position[::-1]),
@@ -93,10 +97,12 @@ class TrajectoryVisualizer:
             (255, 192, 15),
             -1,
         )
+        # 画机器人当前位置的圆点（黄色实心）
         heading_end_pt = (
             int(px_position[0] - self.agent_line_length * self.scale_factor * np.cos(camera_yaw)),
             int(px_position[1] - self.agent_line_length * self.scale_factor * np.sin(camera_yaw)),
         )
+        #计算机器人朝向线终点坐标
         cv2.line(
             img,
             tuple(px_position[::-1]),
@@ -104,14 +110,15 @@ class TrajectoryVisualizer:
             (0, 0, 0),
             int(self.agent_line_thickness * self.scale_factor),
         )
-
+        # 机器人朝向线终点坐标
         return img
 
     def draw_circle(self, img: np.ndarray, position: np.ndarray, **kwargs: Any) -> np.ndarray:
         """Draws the point as a circle on the image and returns it"""
         px_position = self._metric_to_pixel(position)
+        # 转换坐标
         cv2.circle(img, tuple(px_position[::-1]), **kwargs)
-
+        # 画圆
         return img
 
     def _metric_to_pixel(self, pt: np.ndarray) -> np.ndarray:
@@ -119,5 +126,7 @@ class TrajectoryVisualizer:
         # Need to flip y-axis because pixel coordinates start from top left
         px = pt * self._pixels_per_meter * np.array([-1, -1]) + self._origin_in_img
         # px = pt * self._pixels_per_meter + self._origin_in_img
+        # 米坐标乘比例缩放后反转y轴方向，再加上图像原点坐标，得到像素坐标
         px = px.astype(np.int32)
+        # 转为整型（像素索引必须是整数）
         return px
