@@ -213,6 +213,7 @@ def transform_points(transformation_matrix: np.ndarray, points: np.ndarray) -> n
     return transformed_points[:, :3] / transformed_points[:, 3:]
 
 
+#生成点云
 def get_point_cloud(depth_image: np.ndarray, mask: np.ndarray, fx: float, fy: float) -> np.ndarray:
     """Calculates the 3D coordinates (x, y, z) of points in the depth image based on
     the horizontal field of view (HFOV), the image width and height, the depth values,
@@ -226,14 +227,19 @@ def get_point_cloud(depth_image: np.ndarray, mask: np.ndarray, fx: float, fy: fl
 
     Returns:
         np.ndarray: Array of 3D coordinates (x, y, z) of the points in the image plane.
-    """
-    v, u = np.where(mask)
-    z = depth_image[v, u]
-    x = (u - depth_image.shape[1] // 2) * z / fx
-    y = (v - depth_image.shape[0] // 2) * z / fy
-    cloud = np.stack((z, -x, -y), axis=-1)
 
-    return cloud
+    x = (u - cx) * z / fx
+    y = (v - cy) * z / fy
+    """
+    v, u = np.where(mask) #获取mask非0像素点，v行坐标，u列坐标
+    z = depth_image[v, u] #获取像素位置的深度值（距离相机的距离）
+    x = (u - depth_image.shape[1] // 2) * z / fx 
+    #depth_image.shape[1] // 2: 图像中心点的u坐标（cx）
+    #(u - cx): 像素坐标到图像中心的水平偏移
+    #乘以 z / fx: 将像素偏移转换为实际物理距离
+    y = (v - depth_image.shape[0] // 2) * z / fy
+    cloud = np.stack((z, -x, -y), axis=-1) #重新排列坐标轴，通常将相机前方设为Z轴正方向，右侧为X轴正方向，下方为Y轴正方向，负号是调整坐标系方向
+    return cloud 
 
 
 def get_fov(focal_length: float, image_height_or_width: int) -> float:

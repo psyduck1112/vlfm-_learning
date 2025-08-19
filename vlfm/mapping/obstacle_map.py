@@ -17,18 +17,18 @@ class ObstacleMap(BaseMap):
     and another representing the obstacles that the robot has seen so far.
     """
 
-    _map_dtype: np.dtype = np.dtype(bool)
-    _frontiers_px: np.ndarray = np.array([])
-    frontiers: np.ndarray = np.array([])
-    radius_padding_color: tuple = (100, 100, 100)
+    _map_dtype: np.dtype = np.dtype(bool) #地图类型，布尔值
+    _frontiers_px: np.ndarray = np.array([]) #px边界点
+    frontiers: np.ndarray = np.array([]) #显示边界点
+    radius_padding_color: tuple = (100, 100, 100) #机器人半径颜色
 
     def __init__(
         self,
-        min_height: float,
+        min_height: float, #高度范围
         max_height: float,
-        agent_radius: float,
-        area_thresh: float = 3.0,  # square meters
-        hole_area_thresh: int = 100000,  # square pixels
+        agent_radius: float, #机器人碰撞半径
+        area_thresh: float = 3.0,  # square meters 有效边界的最小面积，过滤狭窄缝隙
+        hole_area_thresh: int = 100000,  # square pixels 深度图空洞填充阈值，填充小孔洞
         size: int = 1000,
         pixels_per_meter: int = 20,
     ):
@@ -46,21 +46,21 @@ class ObstacleMap(BaseMap):
         self._navigable_kernel = np.ones((kernel_size, kernel_size), np.uint8)
 
     def reset(self) -> None:
-        super().reset()
-        self._navigable_map.fill(0)
-        self.explored_area.fill(0)
-        self._frontiers_px = np.array([])
+        super().reset() #继承父类重置
+        self._navigable_map.fill(0) #地图矩阵清零
+        self.explored_area.fill(0) #已探索区域清零
+        self._frontiers_px = np.array([]) #边界点缓存清零
         self.frontiers = np.array([])
 
     def update_map(
         self,
-        depth: Union[np.ndarray, Any],
-        tf_camera_to_episodic: np.ndarray,
+        depth: Union[np.ndarray, Any], #深度图像（归一化））
+        tf_camera_to_episodic: np.ndarray, #相机到现实坐标变换矩阵
         min_depth: float,
         max_depth: float,
         fx: float,
-        fy: float,
-        topdown_fov: float,
+        fy: float, #fx/fy 相机焦距
+        topdown_fov: float, #视野角度
         explore: bool = True,
         update_obstacles: bool = True,
     ) -> None:
@@ -84,14 +84,14 @@ class ObstacleMap(BaseMap):
             update_obstacles (bool): Whether to update the obstacle map.
         """
         if update_obstacles:
-            if self._hole_area_thresh == -1:
-                filled_depth = depth.copy()
-                filled_depth[depth == 0] = 1.0
+            if self._hole_area_thresh == -1: #如果空洞填充阈值为-1
+                filled_depth = depth.copy() #复制深度 
+                filled_depth[depth == 0] = 1.0 #将所有深度为0的区域设为1
             else:
-                filled_depth = fill_small_holes(depth, self._hole_area_thresh)
-            scaled_depth = filled_depth * (max_depth - min_depth) + min_depth
-            mask = scaled_depth < max_depth
-            point_cloud_camera_frame = get_point_cloud(scaled_depth, mask, fx, fy)
+                filled_depth = fill_small_holes(depth, self._hole_area_thresh)  #填充小的空洞区域
+            scaled_depth = filled_depth * (max_depth - min_depth) + min_depth  #深度图数值恢复实际
+            mask = scaled_depth < max_depth #创建掩膜，过滤过大像素点
+            point_cloud_camera_frame = get_point_cloud(scaled_depth, mask, fx, fy) #根据深度图和相机内参生成相机坐标系下的3D点云
             point_cloud_episodic_frame = transform_points(tf_camera_to_episodic, point_cloud_camera_frame)
             obstacle_cloud = filter_points_by_height(point_cloud_episodic_frame, self._min_height, self._max_height)
 
