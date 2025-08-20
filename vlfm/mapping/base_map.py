@@ -7,7 +7,7 @@ import numpy as np
 from vlfm.mapping.traj_visualizer import TrajectoryVisualizer
 
 
-class BaseMap:
+class BaseMap: #全局，中心为原点的地图
     _camera_positions: List[np.ndarray] = [] #存储相机位置历史
     _last_camera_yaw: float = 0.0 #记录最后的相机偏航 
     _map_dtype: np.dtype = np.dtype(np.float32) #定义地图的数据类型为32位浮点数

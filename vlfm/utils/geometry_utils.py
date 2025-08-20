@@ -204,12 +204,14 @@ def closest_point_within_threshold(points_array: np.ndarray, target_point: np.nd
 
 def transform_points(transformation_matrix: np.ndarray, points: np.ndarray) -> np.ndarray:
     # Add a homogeneous coordinate of 1 to each point for matrix multiplication
+    #变换为齐次矩阵（加一列1），实现平移和旋转
     homogeneous_points = np.hstack((points, np.ones((points.shape[0], 1))))
 
-    # Apply the transformation matrix to the points
+    # Apply the transformation matrix to the points 转置后矩阵乘法后转置回原形式
     transformed_points = np.dot(transformation_matrix, homogeneous_points.T).T
 
     # Remove the added homogeneous coordinate and divide by the last coordinate
+    #去除变换齐次时加入的列，除w分量（这里使用的是w为1的刚体变换）（全1列）
     return transformed_points[:, :3] / transformed_points[:, 3:]
 
 
@@ -228,7 +230,7 @@ def get_point_cloud(depth_image: np.ndarray, mask: np.ndarray, fx: float, fy: fl
     Returns:
         np.ndarray: Array of 3D coordinates (x, y, z) of the points in the image plane.
 
-    x = (u - cx) * z / fx
+    x = (u - cx) * z / fx  
     y = (v - cy) * z / fy
     """
     v, u = np.where(mask) #获取mask非0像素点，v行坐标，u列坐标
@@ -239,6 +241,7 @@ def get_point_cloud(depth_image: np.ndarray, mask: np.ndarray, fx: float, fy: fl
     #乘以 z / fx: 将像素偏移转换为实际物理距离
     y = (v - depth_image.shape[0] // 2) * z / fy
     cloud = np.stack((z, -x, -y), axis=-1) #重新排列坐标轴，通常将相机前方设为Z轴正方向，右侧为X轴正方向，下方为Y轴正方向，负号是调整坐标系方向
+    #深度图像转化为点云 （深度图像是矩阵2D，点云为点的集合3D）
     return cloud 
 
 

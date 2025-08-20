@@ -33,9 +33,9 @@ class ObstacleMap(BaseMap):
         pixels_per_meter: int = 20,
     ):
         super().__init__(size, pixels_per_meter)
-        self.explored_area = np.zeros((size, size), dtype=bool)
-        self._map = np.zeros((size, size), dtype=bool)
-        self._navigable_map = np.zeros((size, size), dtype=bool)
+        self.explored_area = np.zeros((size, size), dtype=bool) #已探索区域记录
+        self._map = np.zeros((size, size), dtype=bool) #主障碍物地图
+        self._navigable_map = np.zeros((size, size), dtype=bool) #可通行地图
         self._min_height = min_height
         self._max_height = max_height
         self._area_thresh_in_pixels = area_thresh * (self.pixels_per_meter**2)
@@ -92,16 +92,18 @@ class ObstacleMap(BaseMap):
             scaled_depth = filled_depth * (max_depth - min_depth) + min_depth  #深度图数值恢复实际
             mask = scaled_depth < max_depth #创建掩膜，过滤过大像素点
             point_cloud_camera_frame = get_point_cloud(scaled_depth, mask, fx, fy) #根据深度图和相机内参生成相机坐标系下的3D点云
-            point_cloud_episodic_frame = transform_points(tf_camera_to_episodic, point_cloud_camera_frame)
-            obstacle_cloud = filter_points_by_height(point_cloud_episodic_frame, self._min_height, self._max_height)
+            point_cloud_episodic_frame = transform_points(tf_camera_to_episodic, point_cloud_camera_frame) #将相机坐标系下的点云转换到全局坐标系（episodic frame）
+            obstacle_cloud = filter_points_by_height(point_cloud_episodic_frame, self._min_height, self._max_height) #根据高度过滤点
 
             # Populate topdown map with obstacle locations
-            xy_points = obstacle_cloud[:, :2]
-            pixel_points = self._xy_to_px(xy_points)
-            self._map[pixel_points[:, 1], pixel_points[:, 0]] = 1
+            xy_points = obstacle_cloud[:, :2] #提取障碍物点云的x、y坐标
+            pixel_points = self._xy_to_px(xy_points) #转换为像素坐标
+            self._map[pixel_points[:, 1], pixel_points[:, 0]] = 1 #在地图上标记障碍物位置为1
 
             # Update the navigable area, which is an inverse of the obstacle map after a
             # dilation operation to accommodate the robot's radius.
+            # 通过膨胀操作扩展障碍物区域（考虑机器人半径），然后取反得到可导航区域 kernel？
+            #8.20
             self._navigable_map = 1 - cv2.dilate(
                 self._map.astype(np.uint8),
                 self._navigable_kernel,
@@ -112,7 +114,7 @@ class ObstacleMap(BaseMap):
             return
 
         # Update the explored area
-        agent_xy_location = tf_camera_to_episodic[:2, 3]
+        agent_xy_location = tf_camera_to_episodic[:2, 3] 
         agent_pixel_location = self._xy_to_px(agent_xy_location.reshape(1, 2))[0]
         new_explored_area = reveal_fog_of_war(
             top_down_map=self._navigable_map.astype(np.uint8),
