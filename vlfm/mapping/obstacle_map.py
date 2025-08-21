@@ -98,54 +98,64 @@ class ObstacleMap(BaseMap):
             # Populate topdown map with obstacle locations
             xy_points = obstacle_cloud[:, :2] #提取障碍物点云的x、y坐标
             pixel_points = self._xy_to_px(xy_points) #转换为像素坐标
-            self._map[pixel_points[:, 1], pixel_points[:, 0]] = 1 #在地图上标记障碍物位置为1
+            self._map[pixel_points[:, 1], pixel_points[:, 0]] = 1 #在地图上标记障碍物位置为1（向量化写法）
 
             # Update the navigable area, which is an inverse of the obstacle map after a
             # dilation operation to accommodate the robot's radius.
-            # 通过膨胀操作扩展障碍物区域（考虑机器人半径），然后取反得到可导航区域 kernel？
-            #8.20
+            # 通过膨胀操作扩展障碍物区域（考虑机器人半径）
+            # 然后取反得到可导航区域
             self._navigable_map = 1 - cv2.dilate(
-                self._map.astype(np.uint8),
-                self._navigable_kernel,
-                iterations=1,
-            ).astype(bool)
+                self._map.astype(np.uint8), #bool转换成数字，后续处理
+                self._navigable_kernel, 
+                iterations=1, #迭代一次
+            ).astype(bool) #转化为bool
 
         if not explore:
             return
 
         # Update the explored area
-        agent_xy_location = tf_camera_to_episodic[:2, 3] 
-        agent_pixel_location = self._xy_to_px(agent_xy_location.reshape(1, 2))[0]
-        new_explored_area = reveal_fog_of_war(
-            top_down_map=self._navigable_map.astype(np.uint8),
-            current_fog_of_war_mask=np.zeros_like(self._map, dtype=np.uint8),
-            current_point=agent_pixel_location[::-1],
-            current_angle=-extract_yaw(tf_camera_to_episodic),
-            fov=np.rad2deg(topdown_fov),
-            max_line_len=max_depth * self.pixels_per_meter,
+        agent_xy_location = tf_camera_to_episodic[:2, 3] #从变换矩阵中提取智能体的x,y坐标(忽略z轴和旋转部分)
+        agent_pixel_location = self._xy_to_px(agent_xy_location.reshape(1, 2))[0] ## 将世界坐标系中的xy坐标转换为像素坐标系中的坐标
+        
+        #函数返回的是一个 NumPy 数组（二进制掩码），其形状与输入的地图完全相同。 
+        #值为1的像素：代表在当前时刻，智能体的视野中刚刚首次看到的区域。这些区域在上一帧还被迷雾笼罩，而在这一帧变成了可见。
+        new_explored_area = reveal_fog_of_war( #计算当前视野范围内的新探索区域
+            top_down_map=self._navigable_map.astype(np.uint8), #可导航地图转换为数字
+            current_fog_of_war_mask=np.zeros_like(self._map, dtype=np.uint8), #当前掩码，可导地图形状，全零
+            current_point=agent_pixel_location[::-1], #当前智能体位置，反转坐标顺序
+            current_angle=-extract_yaw(tf_camera_to_episodic), #当前角度（取变换矩阵的yaw角负值）
+            fov=np.rad2deg(topdown_fov), #视野角度（弧度转换为度）
+            #FOV参数用于：创建一个扇形或锥形的可见区域，与max_line_len一起定义可见区域的边界
+            max_line_len=max_depth * self.pixels_per_meter, #最大视线长度（转为像素）
         )
-        new_explored_area = cv2.dilate(new_explored_area, np.ones((3, 3), np.uint8), iterations=1)
-        self.explored_area[new_explored_area > 0] = 1
-        self.explored_area[self._navigable_map == 0] = 0
-        contours, _ = cv2.findContours(
+        
+        new_explored_area = cv2.dilate(new_explored_area, np.ones((3, 3), np.uint8), iterations=1) #使用3x3卷积核对新探索区域进行膨胀，填充小孔洞与间隙
+        self.explored_area[new_explored_area > 0] = 1 #将新探索的区域合并到总探索的区域中
+        #将self.explored_area对应位置的值设置为1，两数组形状必须一致
+        self.explored_area[self._navigable_map == 0] = 0 #确保不可导航区域不会标记为已探索
+        #查找探索区域的轮廓（只检测最外层轮廓，简单近似）
+        contours, _ = cv2.findContours(  #函数返回两个值，第一个是轮廓列表，第二个是层次结构信息，_表示忽略复杂层次信息
             self.explored_area.astype(np.uint8),
-            cv2.RETR_EXTERNAL,
-            cv2.CHAIN_APPROX_SIMPLE,
+            cv2.RETR_EXTERNAL, #轮廓检索模式
+            cv2.CHAIN_APPROX_SIMPLE, #轮廓近似方法
         )
-        if len(contours) > 1:
-            min_dist = np.inf
-            best_idx = 0
-            for idx, cnt in enumerate(contours):
+        #contours是一个列表，其中每个元素都是一个轮廓。每个轮廓本身又是一个包含众多点（坐标）的NumPy数组，这些点连接起来就形成了一个封闭的区域
+        if len(contours) > 1:  #当找到的轮廓数量大于1时
+            min_dist = np.inf #初始化变量，记录找到的最小距离
+            best_idx = 0 #初始化变量，记录最小距离对应的轮廓索引
+            for idx, cnt in enumerate(contours): # 遍历所有找到的轮廓（idx是索引，cnt是具体的轮廓数据）
+                # 计算当前轮廓cnt与智能体位置agent_pixel_location的距离
                 dist = cv2.pointPolygonTest(cnt, tuple([int(i) for i in agent_pixel_location]), True)
-                if dist >= 0:
-                    best_idx = idx
-                    break
-                elif abs(dist) < min_dist:
-                    min_dist = abs(dist)
-                    best_idx = idx
-            new_area = np.zeros_like(self.explored_area, dtype=np.uint8)
-            cv2.drawContours(new_area, contours, best_idx, 1, -1)  # type: ignore
-            self.explored_area = new_area.astype(bool)
+                if dist >= 0: #情况1：智能体在当前轮廓内部或边界上
+                    best_idx = idx  #选中轮廓
+                    break #跳出循环 已经找到最佳
+                #情况2：智能体在轮廓外部
+                elif abs(dist) < min_dist: #当前轮廓到智能体的距离比之前记录的最小距离还要小
+                    min_dist = abs(dist) # 更新最小距离
+                    best_idx = idx  # 更新最佳轮廓索引
+            new_area = np.zeros_like(self.explored_area, dtype=np.uint8) #创建一个和原始探索区域形状、数据类型完全相同的全零数组
+            cv2.drawContours(new_area, contours, best_idx, 1, -1)  # type: ignore 在黑色画布上，把best_idx对应的轮廓区域全部涂成白色
+            self.explored_area = new_area.astype(bool)  #将填充好的uint8类型图像转换回布尔类型,赋值给self.explored_area。
 
         # Compute frontier locations
         self._frontiers_px = self._get_frontiers()
