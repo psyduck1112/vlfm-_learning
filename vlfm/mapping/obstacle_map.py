@@ -158,52 +158,53 @@ class ObstacleMap(BaseMap):
             self.explored_area = new_area.astype(bool)  #将填充好的uint8类型图像转换回布尔类型,赋值给self.explored_area。
 
         # Compute frontier locations
-        self._frontiers_px = self._get_frontiers()
-        if len(self._frontiers_px) == 0:
+        self._frontiers_px = self._get_frontiers() #获取边界点像素坐标
+        if len(self._frontiers_px) == 0:  
             self.frontiers = np.array([])
         else:
-            self.frontiers = self._px_to_xy(self._frontiers_px)
+            self.frontiers = self._px_to_xy(self._frontiers_px) # 将像素坐标转化为现实
 
     def _get_frontiers(self) -> np.ndarray:
         """Returns the frontiers of the map."""
         # Dilate the explored area slightly to prevent small gaps between the explored
         # area and the unnavigable area from being detected as frontiers.
-        explored_area = cv2.dilate(
-            self.explored_area.astype(np.uint8),
-            np.ones((5, 5), np.uint8),
+        #防止已探索区域和不可导航区域之间的小缝隙被误检测为边界
+        explored_area = cv2.dilate( 
+            self.explored_area.astype(np.uint8), 
+            np.ones((5, 5), np.uint8), # 5x5的结构元素（核）
             iterations=1,
         )
-        frontiers = detect_frontier_waypoints(
-            self._navigable_map.astype(np.uint8),
+        frontiers = detect_frontier_waypoints( # 进行边界检测
+            self._navigable_map.astype(np.uint8), 
             explored_area,
-            self._area_thresh_in_pixels,
+            self._area_thresh_in_pixels, #面积阈值（像素），忽略太小的区域
         )
-        return frontiers
+        return frontiers # 返回边界点坐标组
 
     def visualize(self) -> np.ndarray:
         """Visualizes the map."""
-        vis_img = np.ones((*self._map.shape[:2], 3), dtype=np.uint8) * 255
+        vis_img = np.ones((*self._map.shape[:2], 3), dtype=np.uint8) * 255  # 创建与地图尺寸相同的rgb
         # Draw explored area in light green
         vis_img[self.explored_area == 1] = (200, 255, 200)
         # Draw unnavigable areas in gray
-        vis_img[self._navigable_map == 0] = self.radius_padding_color
+        vis_img[self._navigable_map == 0] = self.radius_padding_color # 配置的灰色值
         # Draw obstacles in black
         vis_img[self._map == 1] = (0, 0, 0)
         # Draw frontiers in blue (200, 0, 0)
         for frontier in self._frontiers_px:
             cv2.circle(vis_img, tuple([int(i) for i in frontier]), 5, (200, 0, 0), 2)
 
-        vis_img = cv2.flip(vis_img, 0)
+        vis_img = cv2.flip(vis_img, 0)  # 垂直翻转图像 沿水平轴翻转（上下）图像系与地图系y轴方向相反 
 
-        if len(self._camera_positions) > 0:
+        if len(self._camera_positions) > 0:  # 如果有相机位置记录，绘制运动轨迹
             self._traj_vis.draw_trajectory(
                 vis_img,
                 self._camera_positions,
                 self._last_camera_yaw,
             )
 
-        return vis_img
+        return vis_img 
 
 
-def filter_points_by_height(points: np.ndarray, min_height: float, max_height: float) -> np.ndarray:
+def filter_points_by_height(points: np.ndarray, min_height: float, max_height: float) -> np.ndarray: #按照高度筛选点
     return points[(points[:, 2] >= min_height) & (points[:, 2] <= max_height)]
