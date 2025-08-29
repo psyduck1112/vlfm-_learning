@@ -10,16 +10,16 @@ from vlfm.utils.geometry_utils import (
     extract_yaw,
     get_point_cloud,
     transform_points,
-    within_fov_cone,
+    within_fov_cone, # 判断是否在视锥中
 )
 
 
-class ObjectPointCloudMap:
-    clouds: Dict[str, np.ndarray] = {}
-    use_dbscan: bool = True
+class ObjectPointCloudMap: 
+    clouds: Dict[str, np.ndarray] = {} # 存储不同类别对象的点云字典
+    use_dbscan: bool = True # 是否使用DBSCAN聚类过滤点云
 
     def __init__(self, erosion_size: float) -> None:
-        self._erosion_size = erosion_size
+        self._erosion_size = erosion_size  # 腐蚀核大小
         self.last_target_coord: Union[np.ndarray, None] = None
 
     def reset(self) -> None:
@@ -31,24 +31,26 @@ class ObjectPointCloudMap:
 
     def update_map(
         self,
-        object_name: str,
-        depth_img: np.ndarray,
-        object_mask: np.ndarray,
-        tf_camera_to_episodic: np.ndarray,
-        min_depth: float,
-        max_depth: float,
-        fx: float,
+        object_name: str, # 对象类别名称
+        depth_img: np.ndarray,  # 图像深度
+        object_mask: np.ndarray, # 物体掩码
+        tf_camera_to_episodic: np.ndarray, # 相机到全局坐标系的变换矩阵
+        min_depth: float, # 最小有效深度 
+        max_depth: float, # 最大有效深度
+        fx: float,  # 焦距
         fy: float,
     ) -> None:
         """Updates the object map with the latest information from the agent."""
-        local_cloud = self._extract_object_cloud(depth_img, object_mask, min_depth, max_depth, fx, fy)
+        local_cloud = self._extract_object_cloud(depth_img, object_mask, min_depth, max_depth, fx, fy) # 提取点云
+        
         if len(local_cloud) == 0:
             return
 
         # For second-class, bad detections that are too offset or out of range, we
         # assign a random number to the last column of its point cloud that can later
         # be used to identify which points came from the same detection.
-        if too_offset(object_mask):
+
+        if too_offset(object_mask): # 对于偏移严重的检测，给一个随机标识符
             within_range = np.ones_like(local_cloud[:, 0]) * np.random.rand()
         else:
             # Mark all points of local_cloud whose distance from the camera is too far
@@ -140,7 +142,7 @@ class ObjectPointCloudMap:
             target_cloud = target_cloud[target_cloud[:, -1] == 1]
         return target_cloud
 
-    def _extract_object_cloud(
+    def _extract_object_cloud( # 提取物体点云
         self,
         depth: np.ndarray,
         object_mask: np.ndarray,
@@ -149,16 +151,16 @@ class ObjectPointCloudMap:
         fx: float,
         fy: float,
     ) -> np.ndarray:
-        final_mask = object_mask * 255
-        final_mask = cv2.erode(final_mask, None, iterations=self._erosion_size)  # type: ignore
+        final_mask = object_mask * 255 # 转化为8位无符号整型
+        final_mask = cv2.erode(final_mask, None, iterations=self._erosion_size)  # type: ignore 进行腐蚀
 
-        valid_depth = depth.copy()
-        valid_depth[valid_depth == 0] = 1  # set all holes (0) to just be far (1)
-        valid_depth = valid_depth * (max_depth - min_depth) + min_depth
-        cloud = get_point_cloud(valid_depth, final_mask, fx, fy)
-        cloud = get_random_subarray(cloud, 5000)
+        valid_depth = depth.copy() # 复制深度
+        valid_depth[valid_depth == 0] = 1  # 将空洞设置为1，避免计算问题 set all holes (0) to just be far (1)
+        valid_depth = valid_depth * (max_depth - min_depth) + min_depth # 将归一化后的深度值反归一化
+        cloud = get_point_cloud(valid_depth, final_mask, fx, fy) # 生成点云
+        cloud = get_random_subarray(cloud, 5000) # 随机采样5000个点
         if self.use_dbscan:
-            cloud = open3d_dbscan_filtering(cloud)
+            cloud = open3d_dbscan_filtering(cloud) # 使用DBSCAN聚类算法过滤噪声点，保留主要物体点云簇
 
         return cloud
 
@@ -267,7 +269,7 @@ def get_random_subarray(points: np.ndarray, size: int) -> np.ndarray:
 
 
 def too_offset(mask: np.ndarray) -> bool:
-    """
+    """ 判断对象检测是否过于偏离图像中心
     This will return true if the entire bounding rectangle of the mask is either on the
     left or right third of the mask. This is used to determine if the object is too far
     to the side of the image to be a reliable detection.
@@ -279,11 +281,12 @@ def too_offset(mask: np.ndarray) -> bool:
         bool: True if the object is too offset, False otherwise.
     """
     # Find the bounding rectangle of the mask
-    x, y, w, h = cv2.boundingRect(mask)
+    x, y, w, h = cv2.boundingRect(mask) # 获取边界框
 
     # Calculate the thirds of the mask
-    third = mask.shape[1] // 3
+    third = mask.shape[1] // 3 # 计算三分之一宽度 
 
+    #检测是否在左右5%区域
     # Check if the entire bounding rectangle is in the left or right third of the mask
     if x + w <= third:
         # Check if the leftmost point is at the edge of the image
