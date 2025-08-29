@@ -150,7 +150,7 @@ def reveal_fog_of_war(
     final_contours, _ = cv2.findContours(
         visible_cone_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
     )
-    # 找到包含智能体的最小轮廓（实际可见区域）
+    # 找到包含智能体的最小距离轮廓（实际可见区域）
     visible_area = None # 初始化最终选择的可见区域
     min_dist = np.inf  # 初始化最小距离为无限大
     for cnt in final_contours:
