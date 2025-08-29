@@ -89,13 +89,14 @@ def calculate_vfov(hfov: float, width: int, height: int) -> float:
 
 
 def within_fov_cone(
-    cone_origin: np.ndarray,
-    cone_angle: float,
-    cone_fov: float,
-    cone_range: float,
-    points: np.ndarray,
+    cone_origin: np.ndarray, # 锥形视野的原点，3D坐标
+    cone_angle: float, # 锥形的主方向rad
+    cone_fov: float,   # 视野的开口角度rad
+    cone_range: float,  # 视野的最大距离范围
+    points: np.ndarray,  # 数组Nx3 or Nx4
 ) -> np.ndarray:
-    """Checks if points are within a cone of a given origin, angle, fov, and range.
+    """ 检查一组3D点是否位于一个给定原点、角度、视场角和范围定义的锥形视野区域内
+    Checks if points are within a cone of a given origin, angle, fov, and range.
 
     Args:
         cone_origin (np.ndarray): The origin of the cone.
@@ -107,13 +108,18 @@ def within_fov_cone(
     Returns:
         np.ndarray: The subarray of points that are within the cone.
     """
-    directions = points[:, :3] - cone_origin
-    dists = np.linalg.norm(directions, axis=1)
-    angles = np.arctan2(directions[:, 1], directions[:, 0])
-    angle_diffs = np.mod(angles - cone_angle + np.pi, 2 * np.pi) - np.pi
+    directions = points[:, :3] - cone_origin  # 计算每个点到原点的向量
+    dists = np.linalg.norm(directions, axis=1) # 计算距离
+    angles = np.arctan2(directions[:, 1], directions[:, 0]) # 计算每点xy平面上的方位角
+    angle_diffs = np.mod(angles - cone_angle + np.pi, 2 * np.pi) - np.pi 
+    # 计算每个点的角度与主方向的差值
+    # 将所有角度平移pi，确保范围0，2pi
+    # 对2pi取模，再平移回-pi，pi范围
 
-    mask = np.logical_and(dists <= cone_range, np.abs(angle_diffs) <= cone_fov / 2)
-    return points[mask]
+    mask = np.logical_and(dists <= cone_range, np.abs(angle_diffs) <= cone_fov / 2) # 创建掩码，选中同时满足以下条件的点：
+    # 距离在有效范围内
+    # 角度差在视场角的一半以内（即位于锥形内）
+    return points[mask] 
 
 
 def convert_to_global_frame(agent_pos: np.ndarray, agent_yaw: float, local_pos: np.ndarray) -> np.ndarray:
@@ -143,7 +149,8 @@ def convert_to_global_frame(agent_pos: np.ndarray, agent_yaw: float, local_pos: 
 
 
 def extract_yaw(matrix: np.ndarray) -> float:
-    """Extract the yaw angle from a 4x4 transformation matrix.
+    """ 从4x4矩阵中提取偏航角
+    Extract the yaw angle from a 4x4 transformation matrix.
 
     Args:
         matrix (np.ndarray): A 4x4 transformation matrix.
